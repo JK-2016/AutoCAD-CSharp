@@ -1,0 +1,21 @@
+# Ignore Visual Studio temporary files
+.vs/
+
+# Ignore build output folders
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+
+# Auto-generated files
+*.sln.docstates
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Others you might want to ignore
+*.DS_Store
