@@ -293,15 +293,15 @@ namespace Civil
                     ObjectId dimStyleId = GetOrCreateDimStyle(db, trans);
 
                     // Define points for the weir section
-                    List<Point3d> Pnts = new List<Point3d>(22); // Reserve space for indices 0–21
-                    for (int i = 0; i < 22; i++)
+                    List<Point3d> Pnts = new List<Point3d>(28); // Reserve space for indices 0–21
+                    for (int i = 0; i < 28; i++)
                     {
                         Pnts.Add(Point3d.Origin); // Initialize with default points to avoid null access
                     }
 
                     // U/S cut-off points
                     double usCutOffDepth = apron_level - Wcthick_apron - apron_thick - US_cutOff_level;
-                    double usCutOffWidth = usCutOffDepth * US_cutOff_slope + US_cutOff_thickness;
+                    double usCutOffWidth = usCutOffDepth /US_cutOff_slope + US_cutOff_thickness;
                     Pnts[1] = new Point3d(xStart, US_cutOff_level, 0); // P1: U/S cut-off bottom left
                     Pnts[2] = new Point3d(xStart + US_cutOff_thickness, US_cutOff_level, 0); // P2: U/S cut-off bottom right
                     Pnts[3] = new Point3d(xStart + usCutOffWidth, US_cutOff_level + usCutOffDepth, 0); // P3: U/S cut-off top right
@@ -319,11 +319,14 @@ namespace Civil
                     Pnts[18] = new Point3d(Pnts[20].X - dsBatterWidth, crestLevel, 0);
                     Pnts[19] = new Point3d(Pnts[18].X - widthStem, crestBaseLevel, 0);
 
+                   
+
+
                     // Body wall
                     AddLine(msBlkRec, trans, Pnts[10], Pnts[21], "Wall"); // Base
                     AcadLine line2 = AddLine(msBlkRec, trans, Pnts[9], Pnts[19], "Wall"); // U/S batter
                     AddLine(msBlkRec, trans, Pnts[19], Pnts[18], "Wall"); // Crest
-                    AddLine(msBlkRec, trans, Pnts[18], Pnts[20], "Wall"); // D/S batter
+                    AcadLine dsline = AddLine(msBlkRec, trans, Pnts[18], Pnts[20], "Wall"); // D/S batter
                     AddLine(msBlkRec, trans, Pnts[10], Pnts[11], "Wall"); // Left thickness
                     AddLine(msBlkRec, trans, Pnts[12], Pnts[21], "Wall"); // Right thickness
                     AddLine(msBlkRec, trans, Pnts[11], Pnts[12], "Wall"); // Foundation bottom
@@ -345,7 +348,46 @@ namespace Civil
                         ed.WriteMessage("\nError: Failed to create apron thickness offset line.");
                         return;
                     }
+                    // Cistern and end sill points
+                    Pnts[22] = new Point3d(Pnts[20].X + cisternLength, foundationTopLevel, 0);
+                    Pnts[23] = new Point3d(Pnts[22].X + (endSillLevel - foundationTopLevel - Wcthick_body) * endSillSlope, endSillLevel - Wcthick_body, 0);
 
+                    AcadLine cisBotLine = AddLine(msBlkRec, trans, Pnts[21], Pnts[22], "Wall");
+                    AcadLine cisTopLine = CreateOffsetLine(msBlkRec, trans, cisBotLine, Wcthick_body, null, "Wall");
+
+
+                    AcadLine sillSlopeInLine = AddLine(msBlkRec, trans, Pnts[22], Pnts[23], "Wall");
+                    AcadLine sillSlopeLine = CreateOffsetLine(msBlkRec, trans, sillSlopeInLine, Wcthick_body, null, "Wall");
+
+                    cisTopLine = ExtendLine(cisTopLine, sillSlopeInLine);//, Pnts[20])
+                    sillSlopeLine = ExtendLine(sillSlopeLine, cisBotLine);//, Pnts[23]);
+
+                    // Pnts[16] = (Point3d)GetIntersectionPoint(cisTopLine, sillSlopeLine);
+                    cisTopLine = TrimLine(cisTopLine, sillSlopeLine, Pnts[20]);
+                    sillSlopeLine = TrimLine(sillSlopeLine,cisTopLine, Pnts[23]);
+
+                    cisTopLine = ExtendLine(cisTopLine, dsline);
+
+                    AcadLine sillTopLine = AddLine(msBlkRec, trans, new Point3d(Pnts[20].X, endSillLevel, 0), new Point3d(Pnts[23].X, endSillLevel, 0), "Wall");
+                    
+                    sillSlopeLine = ExtendLine(sillSlopeLine, sillTopLine);
+
+                    sillTopLine = TrimLine(sillTopLine, sillSlopeLine, Pnts[23]);
+                    Pnts[15] = (Point3d)GetIntersectionPoint(sillSlopeLine, sillTopLine);
+                    Pnts[14] = new Point3d(Pnts[15].X + endSillTopWidth, Pnts[15].Y, 0);
+                    Pnts[24] = new Point3d(Pnts[14].X , Pnts[14].Y-Wcthick_body, 0);
+                    Pnts[13] = new Point3d(Pnts[14].X, foundationBottomLevel, 0);
+                    Pnts[25] = new Point3d(Pnts[14].X, DS_cutOff_level, 0);
+                    Pnts[26] = new Point3d(Pnts[25].X-DS_cutOff_thickness, DS_cutOff_level, 0);
+                    Pnts[27] = new Point3d(Pnts[26].X - (foundationBottomLevel-DS_cutOff_level)/DS_cutOff_slope, foundationBottomLevel, 0);
+
+                    AddLine(msBlkRec, trans, Pnts[25], Pnts[26], "Wall");
+                    AddLine(msBlkRec, trans, Pnts[26], Pnts[27], "Wall");
+                    AddLine(msBlkRec, trans, Pnts[12], Pnts[27], "Wall");
+                    AcadLine rightLine = AddLine(msBlkRec, trans, Pnts[14], Pnts[25], "Wall");
+                    sillTopLine = ExtendLine(sillTopLine, rightLine);
+
+                    CreateOffsetLine(msBlkRec,trans, sillTopLine, -Wcthick_body, sillSlopeInLine, "Wall");
                     // Commented code from original implementation
                     /*
                     // Foundation points
@@ -779,7 +821,118 @@ namespace Civil
             hatch.AppendLoop(HatchLoopTypes.Default, ids);
             hatch.EvaluateHatch(true);
         }
+        private AcadLine TrimLine(AcadLine line, AcadLine otherLine, Point3d? pickPoint = null)
+        {
+            // Get intersection points
+            Point3dCollection intersectionPoints = new Point3dCollection();
+            line.IntersectWith(otherLine, Intersect.OnBothOperands, intersectionPoints, IntPtr.Zero, IntPtr.Zero);
 
+            if (intersectionPoints.Count == 0)
+                return null;
+
+            Point3d intersection = intersectionPoints[0]; // Take first intersection
+
+            // Calculate distances from intersection to line endpoints
+            double distToStart = intersection.DistanceTo(line.StartPoint);
+            double distToEnd = intersection.DistanceTo(line.EndPoint);
+
+            if (pickPoint.HasValue)
+            {
+                // Use pickPoint to decide which endpoint to keep
+                double distPickToStart = pickPoint.Value.DistanceTo(line.StartPoint);
+                double distPickToEnd = pickPoint.Value.DistanceTo(line.EndPoint);
+
+                // Keep the endpoint closer to pickPoint
+                if (distPickToStart < distPickToEnd)
+                    line.EndPoint = intersection; // Trim end point
+                else
+                    line.StartPoint = intersection; // Trim start point
+            }
+            else
+            {
+                // Fallback to original logic: keep segment that doesn't cross otherLine
+                Point3d testPoint = distToStart < distToEnd
+                    ? line.StartPoint + (line.EndPoint - line.StartPoint).GetNormal() * 0.01
+                    : line.EndPoint + (line.StartPoint - line.EndPoint).GetNormal() * 0.01;
+
+                if (!IsPointOnOtherSide(testPoint, otherLine, intersection))
+                {
+                    if (distToStart > distToEnd)
+                        line.EndPoint = intersection;
+                    else
+                        line.StartPoint = intersection;
+                }
+                else
+                {
+                    if (distToStart < distToEnd)
+                        line.StartPoint = intersection;
+                    else
+                        line.EndPoint = intersection;
+                }
+            }
+
+            return line;
+        }
+
+        private AcadLine ExtendLine(AcadLine line, AcadLine otherLine, Point3d? pickPoint = null)
+        {
+            // Get intersection points
+            Point3dCollection intersectionPoints = new Point3dCollection();
+            line.IntersectWith(otherLine, Intersect.ExtendThis, intersectionPoints, IntPtr.Zero, IntPtr.Zero);
+
+            if (intersectionPoints.Count == 0)
+                return null;
+
+            Point3d intersection = intersectionPoints[0]; // Take first intersection
+
+            // Calculate distances from intersection to line endpoints
+            double distToStart = intersection.DistanceTo(line.StartPoint);
+            double distToEnd = intersection.DistanceTo(line.EndPoint);
+
+            if (pickPoint.HasValue)
+            {
+                // Use pickPoint to decide which endpoint to extend
+                double distPickToStart = pickPoint.Value.DistanceTo(line.StartPoint);
+                double distPickToEnd = pickPoint.Value.DistanceTo(line.EndPoint);
+
+                // Extend the endpoint closer to pickPoint
+                if (distPickToStart < distPickToEnd)
+                    line.StartPoint = intersection; // Extend start point
+                else
+                    line.EndPoint = intersection; // Extend end point
+            }
+            else
+            {
+                // Fallback to original logic: extend the closer endpoint
+                if (distToStart < distToEnd)
+                    line.StartPoint = intersection;
+                else
+                    line.EndPoint = intersection;
+            }
+
+            return line;
+        }
+
+
+        private bool IsPointOnOtherSide(Point3d testPoint, AcadLine otherLine, Point3d intersection)
+        {
+            // Determine if testPoint is on the opposite side of otherLine relative to intersection
+            Vector3d lineDir = otherLine.EndPoint - otherLine.StartPoint;
+            Vector3d toTest = testPoint - otherLine.StartPoint;
+            Vector3d toIntersection = intersection - otherLine.StartPoint;
+
+            double crossTest = lineDir.X * toTest.Y - lineDir.Y * toTest.X;
+            double crossIntersection = lineDir.X * toIntersection.Y - lineDir.Y * toIntersection.X;
+
+            return (crossTest * crossIntersection < 0);
+        }
+
+        private Point3d? GetIntersectionPoint(AcadLine line1, AcadLine line2)
+        {
+            Point3dCollection intersectionPoints = new Point3dCollection();
+            line1.IntersectWith(line2, Intersect.OnBothOperands, intersectionPoints, IntPtr.Zero, IntPtr.Zero);
+            return intersectionPoints.Count > 0 ? intersectionPoints[0] : (Point3d?)null;
+        }
 
         /// <summary>
         /// Creates a line offset from an input line by a specified distance, optionally trimmed by another line.
