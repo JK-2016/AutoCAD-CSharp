@@ -323,14 +323,23 @@ namespace Civil
 
 
                     // Body wall
-                    AddLine(msBlkRec, trans, Pnts[10], Pnts[21], "Wall"); // Base
+                    AcadLine fTopLine = AddLine(msBlkRec, trans, Pnts[10], Pnts[21], "Wall"); // Base
                     AcadLine line2 = AddLine(msBlkRec, trans, Pnts[9], Pnts[19], "Wall"); // U/S batter
-                    AddLine(msBlkRec, trans, Pnts[19], Pnts[18], "Wall"); // Crest
+                    AcadLine crestLine = AddLine(msBlkRec, trans, Pnts[19], Pnts[18], "Wall"); // Crest
                     AcadLine dsline = AddLine(msBlkRec, trans, Pnts[18], Pnts[20], "Wall"); // D/S batter
                     AddLine(msBlkRec, trans, Pnts[10], Pnts[11], "Wall"); // Left thickness
                     AddLine(msBlkRec, trans, Pnts[12], Pnts[21], "Wall"); // Right thickness
                     AddLine(msBlkRec, trans, Pnts[11], Pnts[12], "Wall"); // Foundation bottom
-                                                                          // Apron
+                                     // Wearing coat Offset 
+                    AcadLine usLine1 = CreateOffsetLine(msBlkRec, trans, line2, -Wcthick_body, fTopLine, "Wall");
+                    AcadLine crestLine1 = CreateOffsetLine(msBlkRec, trans, crestLine, -Wcthick_body, usLine1, "Wall");
+                    AcadLine dsline1 = CreateOffsetLine(msBlkRec, trans, dsline, -Wcthick_body, crestLine1, "Wall");
+
+                    usLine1 = TrimLine(usLine1, crestLine1, Pnts[5]);
+                    crestLine1 = TrimLine(crestLine1, dsline1, Pnts[19]);
+                    dsline1 = TrimLine(dsline1, fTopLine, Pnts[18]);
+
+                    // Apron
                     AcadLine line1 = AddLine(msBlkRec, trans, Pnts[4], Pnts[5], "Wall"); // Apron top
                     AddLine(msBlkRec, trans, Pnts[1], Pnts[2], "Wall");//cut-off bottom
                     AddLine(msBlkRec, trans, Pnts[2], Pnts[3], "Wall");//cut-off slope
