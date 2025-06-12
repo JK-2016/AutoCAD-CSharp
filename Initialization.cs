@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using Autodesk.AutoCAD.GraphicsInterface;
 using System.Windows.Shapes;
 using AcadLine = Autodesk.AutoCAD.DatabaseServices.Line;
+using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 namespace Civil
 {
     public class Initialization : IExtensionApplication
@@ -199,7 +200,7 @@ namespace Civil
                        Wcthick_body = 0.0, Wcthick_apron = 0.0, apron_length = 0.0, apron_thick = 0.0, apron_level = 0.0,
                        US_cutOff_level = 0.0, US_cutOff_slope = 0.0, US_cutOff_thickness = 0.0, cisternThickness = 0.0,
                        cisternLength = 0.0, endSillLevel = 0.0, endSillSlope = 0.0, endSillTopWidth = 0.0,
-                       DS_cutOff_level = 0.0, DS_cutOff_slope = 0.0, DS_cutOff_thickness = 0.0;
+                       DS_cutOff_level = 0.0, DS_cutOff_slope = 0.0, DS_cutOff_thickness = 0.0,cisternLevel = 0.0;
 
                 // Helper function to read and validate a cell
                 bool ReadAndValidateCell(int row, int col, out double value, string paramName, bool mustBePositive = true)
@@ -233,14 +234,15 @@ namespace Civil
                 if (!ReadAndValidateCell(16, 2, out US_cutOff_level, "U/S cut-off level", false)) return; US_cutOff_level *= 1000;
                 if (!ReadAndValidateCell(17, 2, out US_cutOff_slope, "U/S cut-off slope")) return;
                 if (!ReadAndValidateCell(18, 2, out US_cutOff_thickness, "U/S cut-off thickness")) return; US_cutOff_thickness *= 1000;
-                if (!ReadAndValidateCell(19, 2, out cisternThickness, "cistern thickness")) return; cisternThickness *= 1000;
-                if (!ReadAndValidateCell(20, 2, out cisternLength, "cistern length")) return; cisternLength *= 1000;
-                if (!ReadAndValidateCell(21, 2, out endSillLevel, "end sill level", false)) return; endSillLevel *= 1000;
-                if (!ReadAndValidateCell(22, 2, out endSillSlope, "end sill slope")) return;
-                if (!ReadAndValidateCell(23, 2, out endSillTopWidth, "end sill top width")) return; endSillTopWidth *= 1000;
-                if (!ReadAndValidateCell(24, 2, out DS_cutOff_level, "D/S cut-off level", false)) return; DS_cutOff_level *= 1000;
-                if (!ReadAndValidateCell(25, 2, out DS_cutOff_slope, "D/S cut-off slope")) return;
-                if (!ReadAndValidateCell(26, 2, out DS_cutOff_thickness, "D/S cut-off thickness")) return; DS_cutOff_thickness *= 1000;
+                if (!ReadAndValidateCell(19, 2, out cisternLevel, "cistern Level")) return; cisternLevel *= 1000;
+                if (!ReadAndValidateCell(20, 2, out cisternThickness, "cistern thickness")) return; cisternThickness *= 1000;
+                if (!ReadAndValidateCell(21, 2, out cisternLength, "cistern length")) return; cisternLength *= 1000;
+                if (!ReadAndValidateCell(22, 2, out endSillLevel, "end sill level", false)) return; endSillLevel *= 1000;
+                if (!ReadAndValidateCell(23, 2, out endSillSlope, "end sill slope")) return;
+                if (!ReadAndValidateCell(24, 2, out endSillTopWidth, "end sill top width")) return; endSillTopWidth *= 1000;
+                if (!ReadAndValidateCell(25, 2, out DS_cutOff_level, "D/S cut-off level", false)) return; DS_cutOff_level *= 1000;
+                if (!ReadAndValidateCell(26, 2, out DS_cutOff_slope, "D/S cut-off slope")) return;
+                if (!ReadAndValidateCell(27, 2, out DS_cutOff_thickness, "D/S cut-off thickness")) return; DS_cutOff_thickness *= 1000;
 
                 // Validate level hierarchy
                 if (!(crestLevel > foundationTopLevel && foundationTopLevel > foundationBottomLevel))
@@ -294,7 +296,7 @@ namespace Civil
 
                     // Define points for the weir section
                     List<Point3d> Pnts = new List<Point3d>(28); // Reserve space for indices 0–21
-                    for (int i = 0; i < 28; i++)
+                    for (int i = 0; i < 29; i++)
                     {
                         Pnts.Add(Point3d.Origin); // Initialize with default points to avoid null access
                     }
@@ -308,9 +310,9 @@ namespace Civil
 
                     // Apron points
                     Pnts[4] = new Point3d(xStart, apron_level, 0); // P4: Apron top left
-                    Pnts[5] = new Point3d(xStart + apron_length, apron_level, 0); // P5: Apron top right
+                    Pnts[5] = new Point3d(xStart + apron_length+ (apron_level - foundationTopLevel) * usBatterWidth / (crestBaseLevel - foundationTopLevel), apron_level, 0); // P5: Apron top right
 
-                    Pnts[9] = new Point3d(Pnts[5].X - (apron_level - foundationTopLevel) * usBatterWidth / (crestBaseLevel - foundationTopLevel), foundationTopLevel, 0); // Body wall base left
+                    Pnts[9] = new Point3d(xStart + apron_length, foundationTopLevel, 0); // Body wall base left
                     Pnts[10] = new Point3d(Pnts[9].X - foundationOffset, foundationTopLevel, 0); // Foundation left
                     Pnts[11] = new Point3d(Pnts[10].X, foundationBottomLevel, 0);
                     Pnts[12] = new Point3d(Pnts[10].X + foundationWidth, foundationBottomLevel, 0); // Body wall base right
@@ -320,15 +322,13 @@ namespace Civil
                     Pnts[19] = new Point3d(Pnts[18].X - widthStem, crestBaseLevel, 0);
 
                    
-
-
                     // Body wall
                     AcadLine fTopLine = AddLine(msBlkRec, trans, Pnts[10], Pnts[21], "Wall"); // Base
                     AcadLine line2 = AddLine(msBlkRec, trans, Pnts[9], Pnts[19], "Wall"); // U/S batter
                     AcadLine crestLine = AddLine(msBlkRec, trans, Pnts[19], Pnts[18], "Wall"); // Crest
                     AcadLine dsline = AddLine(msBlkRec, trans, Pnts[18], Pnts[20], "Wall"); // D/S batter
                     AddLine(msBlkRec, trans, Pnts[10], Pnts[11], "Wall"); // Left thickness
-                    AddLine(msBlkRec, trans, Pnts[12], Pnts[21], "Wall"); // Right thickness
+                    AcadLine foundationRight = AddLine(msBlkRec, trans, Pnts[12], Pnts[21], "Wall"); // Right thickness
                     AddLine(msBlkRec, trans, Pnts[11], Pnts[12], "Wall"); // Foundation bottom
                                      // Wearing coat Offset 
                     AcadLine usLine1 = CreateOffsetLine(msBlkRec, trans, line2, -Wcthick_body, fTopLine, "Wall");
@@ -358,10 +358,11 @@ namespace Civil
                         return;
                     }
                     // Cistern and end sill points
-                    Pnts[22] = new Point3d(Pnts[20].X + cisternLength, foundationTopLevel, 0);
+                    Pnts[22] = new Point3d(Pnts[20].X + cisternLength, cisternLevel-Wcthick_body, 0);
                     Pnts[23] = new Point3d(Pnts[22].X + (endSillLevel - foundationTopLevel - Wcthick_body) * endSillSlope, endSillLevel - Wcthick_body, 0);
 
-                    AcadLine cisBotLine = AddLine(msBlkRec, trans, Pnts[21], Pnts[22], "Wall");
+                    AcadLine cisBotLine = AddLine(msBlkRec, trans, new Point3d(Pnts[22].X-50, Pnts[22].Y, 0), Pnts[22], "Wall");
+                    cisBotLine = ExtendLine(cisBotLine, dsline1);//, Pnts[28]);
                     AcadLine cisTopLine = CreateOffsetLine(msBlkRec, trans, cisBotLine, Wcthick_body, null, "Wall");
 
 
@@ -382,21 +383,31 @@ namespace Civil
                     sillSlopeLine = ExtendLine(sillSlopeLine, sillTopLine);
 
                     sillTopLine = TrimLine(sillTopLine, sillSlopeLine, Pnts[23]);
+
+                    double cisternBaseLevel = cisternLevel - cisternThickness - Wcthick_body;
                     Pnts[15] = (Point3d)GetIntersectionPoint(sillSlopeLine, sillTopLine);
                     Pnts[14] = new Point3d(Pnts[15].X + endSillTopWidth, Pnts[15].Y, 0);
                     Pnts[24] = new Point3d(Pnts[14].X , Pnts[14].Y-Wcthick_body, 0);
-                    Pnts[13] = new Point3d(Pnts[14].X, foundationBottomLevel, 0);
+                    Pnts[13] = new Point3d(Pnts[14].X, cisternBaseLevel, 0);
                     Pnts[25] = new Point3d(Pnts[14].X, DS_cutOff_level, 0);
                     Pnts[26] = new Point3d(Pnts[25].X-DS_cutOff_thickness, DS_cutOff_level, 0);
-                    Pnts[27] = new Point3d(Pnts[26].X - (foundationBottomLevel-DS_cutOff_level)/DS_cutOff_slope, foundationBottomLevel, 0);
+                    Pnts[27] = new Point3d(Pnts[26].X - (cisternBaseLevel-DS_cutOff_level)/DS_cutOff_slope, cisternBaseLevel, 0);
 
                     AddLine(msBlkRec, trans, Pnts[25], Pnts[26], "Wall");
                     AddLine(msBlkRec, trans, Pnts[26], Pnts[27], "Wall");
-                    AddLine(msBlkRec, trans, Pnts[12], Pnts[27], "Wall");
+                    AcadLine cisternBottomLine =AddLine(msBlkRec, trans, Pnts[13], new Point3d(Pnts[9].X, Pnts[13].Y, 0), "Wall");
                     AcadLine rightLine = AddLine(msBlkRec, trans, Pnts[14], Pnts[25], "Wall");
                     sillTopLine = ExtendLine(sillTopLine, rightLine);
+                    if(GetIntersectionPoint(cisternBottomLine, dsline)!=null)
+                        cisternBottomLine = TrimLine(cisternBottomLine, dsline, Pnts[13]);
+                    else if(GetIntersectionPoint(cisternBottomLine, foundationRight) != null)
+                        cisternBottomLine = TrimLine(cisternBottomLine, foundationRight, Pnts[13]);
+                    else
+                        cisternBottomLine.EndPoint = new Point3d(Pnts[20].X, Pnts[13].Y, 0);
 
-                    CreateOffsetLine(msBlkRec,trans, sillTopLine, -Wcthick_body, sillSlopeInLine, "Wall");
+                    CreateOffsetLine(msBlkRec, trans, sillTopLine, -Wcthick_body, sillSlopeInLine, "Wall");
+
+
                     // Commented code from original implementation
                     /*
                     // Foundation points
@@ -540,6 +551,97 @@ namespace Civil
             }
         }
 
+        [CommandMethod("DRAWREBAR")]
+        public void DrawRebarCommand()
+        {
+            var ed = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument.Editor;
+            var db = Autodesk.AutoCAD.DatabaseServices.HostApplicationServices.WorkingDatabase;
+
+            try
+            {
+                // Prompt user to select a line
+                PromptEntityOptions peo = new PromptEntityOptions("\nSelect a line for reinforcement: ");
+                peo.SetRejectMessage("\nPlease select a line.");
+                peo.AddAllowedClass(typeof(AcadLine), true);
+                PromptEntityResult per = ed.GetEntity(peo);
+
+                if (per.Status != PromptStatus.OK)
+                    return;
+
+                // Prompt for direction (left or right)
+                PromptKeywordOptions pko = new PromptKeywordOptions("\nSpecify reinforcement direction [Left/Right]: ");
+                pko.Keywords.Add("Left");
+                pko.Keywords.Add("Right");
+                pko.AllowNone = false;
+                PromptResult pr = ed.GetKeywords(pko);
+
+                if (pr.Status != PromptStatus.OK)
+                    return;
+
+                bool isRightSide = pr.StringResult == "Right";
+
+
+                // Prompt for distribution bar diameter
+                PromptDoubleOptions pdo = new PromptDoubleOptions("\nEnter distribution bar diameter (mm): ")
+                {
+                    AllowZero = false,
+                    AllowNegative = false,
+                    DefaultValue = 12.0
+                };
+                PromptDoubleResult pdr = ed.GetDouble(pdo);
+
+                if (pdr.Status != PromptStatus.OK)
+                    return;
+
+
+                // Define reinforcement parameters
+                double offset = 50.0;        // mm
+                double barDiameter_m = 20.0; // Main bar diameter (mm)
+                double spacing_m = 200.0;    // Main bar spacing (mm)
+                double barDiameter_d = pdr.Value; ; // Distribution bar diameter (mm)
+                double spacing_d = 150.0;    // Distribution bar spacing (mm)
+                //double topld = 0;        // Top development length (mm)
+               // double botld = 0;        // Bottom development length (mm)
+                //bool batter = false;         // No batter for simplicity
+
+                using (Transaction trans = db.TransactionManager.StartTransaction())
+                {
+                    BlockTable blkTbl = trans.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                    BlockTableRecord msBlkRec = trans.GetObject(blkTbl[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
+
+                    // Get the selected line
+                    AcadLine selectedLine = (AcadLine)trans.GetObject(per.ObjectId, OpenMode.ForRead);
+                    Point3d start = selectedLine.StartPoint;
+                    Point3d end = selectedLine.EndPoint;
+
+                    // Calculate mid-point for the third point (pt9)
+                    Point3d midPoint = new Point3d(
+                        (start.X + end.X) / 2.0,
+                        (start.Y + end.Y) / 2.0,
+                        0);
+
+                    // Compute direction and perpendicular vectors
+                    Vector3d direction = (end - start).GetNormal();
+                    Vector3d perpDirection = new Vector3d(-direction.Y, direction.X, 0).GetNormal();
+                    if (isRightSide)
+                        perpDirection = -perpDirection; // Reverse for right side
+
+                    // Call AddReinforcement with adjusted points
+                    AddReinforcementForLine(
+                        msBlkRec, trans,
+                        start, end,
+                        offset, barDiameter_m, spacing_m,
+                        barDiameter_d, spacing_d,
+                        perpDirection,isRightSide);
+
+                    trans.Commit();
+                }
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nError: {ex.Message}");
+            }
+        }
 
         // Helper method to check if a point is outside the polygon
         private bool IsPointOutsidePolygon(Point3d point, Point3d[] polygon)
@@ -664,29 +766,89 @@ namespace Civil
             trans.AddNewlyCreatedDBObject(newLayer, true);
             return layerId;
         }
-        private void AddLeaderWithText(BlockTableRecord msBlkRec, Transaction trans, Point3d attachPoint, string text)
+        //private void AddLeaderWithText(BlockTableRecord msBlkRec, Transaction trans, Point3d attachPoint, string text)
+        //{
+        //    ObjectId leaderLayerId = GetOrCreateLayer(msBlkRec.Database, trans, "Annotations", 4);
+        //    double dimasz = (double)acadApp.GetSystemVariable("DIMASZ");
+        //    using (Leader leader = new Leader())
+        //    {
+        //        leader.SetDatabaseDefaults();
+        //        leader.LayerId = leaderLayerId;
+        //        leader.Dimasz = 200;
+        //        leader.ColorIndex = 4; // Cyan for annotations
+        //        leader.AppendVertex(attachPoint);
+        //        //leader.AppendVertex(new Point3d(attachPoint.X + 300, attachPoint.Y + 300, 0)); // Leader elbow
+        //        leader.AppendVertex(new Point3d(attachPoint.X + 700, attachPoint.Y + 400, 0)); // Final point
+        //        msBlkRec.AppendEntity(leader);
+        //        trans.AddNewlyCreatedDBObject(leader, true);
+        //        // Attach multiline text to leader
+        //        using (MText mtext = new MText())
+        //        {
+        //            mtext.SetDatabaseDefaults();
+        //            mtext.Contents = text;
+        //            mtext.Location = new Point3d(attachPoint.X + 700, attachPoint.Y + 400, 0);
+        //            mtext.TextHeight = 150;
+        //            mtext.LayerId = leaderLayerId;
+
+        //            msBlkRec.AppendEntity(mtext);
+        //            trans.AddNewlyCreatedDBObject(mtext, true);
+        //            leader.Annotation = mtext.ObjectId;
+        //            leader.Annotative = AnnotativeStates.True;
+        //            leader.EvaluateLeader();
+        //        }
+
+
+        //    }
+        //}
+
+
+        private void AddLeaderWithText(BlockTableRecord msBlkRec, Transaction trans, Point3d attachPoint, string text,
+             double offsetX = 700.0, double offsetY = 400.0, bool isFlipped = false)
         {
-            ObjectId leaderLayerId = GetOrCreateLayer(msBlkRec.Database, trans, "Annotations", 4);
-            double dimasz = (double)acadApp.GetSystemVariable("DIMASZ");
+            ObjectId leaderLayerId = GetOrCreateLayer(msBlkRec.Database, trans, "Annotations.AutoCAD", 4);
             using (Leader leader = new Leader())
             {
                 leader.SetDatabaseDefaults();
                 leader.LayerId = leaderLayerId;
-                leader.Dimasz = 200;
+                leader.Dimasz = 200; // Arrow size
+                leader.HasArrowHead = true; // Explicitly enable arrow
                 leader.ColorIndex = 4; // Cyan for annotations
-                leader.AppendVertex(attachPoint);
-                //leader.AppendVertex(new Point3d(attachPoint.X + 300, attachPoint.Y + 300, 0)); // Leader elbow
-                leader.AppendVertex(new Point3d(attachPoint.X + 700, attachPoint.Y + 400, 0)); // Final point
+
+                Point3d textPoint = new Point3d(attachPoint.X + offsetX, attachPoint.Y + offsetY, 0);
+
+                if (isFlipped)
+                {
+                    // Leader starts at text (top-right) and ends at attachPoint
+                    leader.AppendVertex(textPoint);
+                    leader.AppendVertex(attachPoint);
+                }
+                else
+                {
+                    // Leader starts at attachPoint and ends at text
+                    leader.AppendVertex(attachPoint);
+                    leader.AppendVertex(textPoint);
+                }
+
                 msBlkRec.AppendEntity(leader);
                 trans.AddNewlyCreatedDBObject(leader, true);
-                // Attach multiline text to leader
+
                 using (MText mtext = new MText())
                 {
                     mtext.SetDatabaseDefaults();
                     mtext.Contents = text;
-                    mtext.Location = new Point3d(attachPoint.X + 700, attachPoint.Y + 400, 0);
                     mtext.TextHeight = 150;
                     mtext.LayerId = leaderLayerId;
+
+                    if (isFlipped)
+                    {
+                        mtext.Attachment = AttachmentPoint.TopRight;
+                        mtext.Location = textPoint; // Top-right corner at textPoint
+                    }
+                    else
+                    {
+                        mtext.Attachment = AttachmentPoint.BottomLeft;
+                        mtext.Location = textPoint; // Bottom-left corner at textPoint
+                    }
 
                     msBlkRec.AppendEntity(mtext);
                     trans.AddNewlyCreatedDBObject(mtext, true);
@@ -694,10 +856,10 @@ namespace Civil
                     leader.Annotative = AnnotativeStates.True;
                     leader.EvaluateLeader();
                 }
-
-                
             }
         }
+
+
 
         // Adds reinforcement lines and rebar circles
         private void AddReinforcement(BlockTableRecord msBlkRec, Transaction trans, Point3d pt0, Point3d pt9, Point3d pt8, double offset, double barDiameter_m, double spacing_m, double barDiameter_d, double spacing_d,double topld, double botld, Boolean batter)
@@ -723,7 +885,7 @@ namespace Civil
             }
 
                 // Add offset reinforcement lines
-                AddLine(msBlkRec, trans, offsetPt0, offsetPt9,"Reinforcement");
+            AddLine(msBlkRec, trans, offsetPt0, offsetPt9,"Reinforcement");
             AddLine(msBlkRec, trans, offsetPt9, offsetPt8, "Reinforcement");
             AddLine(msBlkRec, trans, offsetPt0, topbarpnt, "Reinforcement"); 
             AddLine(msBlkRec, trans, botbarpnt, offsetPt8, "Reinforcement");
@@ -803,7 +965,140 @@ namespace Civil
                 AddRebarCircle(msBlkRec, trans, barCenter, barDiameter_d / 2, rebarLayerId);
             }
         }
+        private void AddReinforcementForLine(BlockTableRecord msBlkRec, Transaction trans, Point3d pt0, Point3d pt8,
+    double offset, double barDiameter_m, double spacing_m, double barDiameter_d, double spacing_d,
+    Vector3d perpDirection, bool isRightSide)
+        {
+            ObjectId rebarLayerId = GetOrCreateLayer(msBlkRec.Database, trans, "Reinforcement", 2);
 
+            // Offset reinforcement path
+            Point3d offsetPt0 = pt0 + (perpDirection * offset);
+            Point3d offsetPt8 = pt8 + (perpDirection * offset);
+
+            // Compute direction vector
+            Vector3d direction = (offsetPt8 - offsetPt0).GetNormal();
+
+            // Add reinforcement line
+            AddLine(msBlkRec, trans, offsetPt0, offsetPt8, "Reinforcement");
+
+            // Place rebars starting at least one diameter inside
+            double d = barDiameter_d;
+            double totalLength = offsetPt0.DistanceTo(offsetPt8);
+            while (d < totalLength - barDiameter_d)
+            {
+                Point3d baseCenter = offsetPt0 + (direction * d);
+                Point3d barCenter = baseCenter - (perpDirection * (barDiameter_d / 2));
+                AddRebarCircle(msBlkRec, trans, barCenter, barDiameter_d / 2, rebarLayerId);
+                d += spacing_d;
+            }
+            // Text height from AddLeaderWithText
+            double textHeight = 150.0;
+
+
+            //double textHeight = 150.0;
+
+            // Determine leader offsets based on line slope and side
+            bool isFlipped = direction.X > 0; // Flip for right-sloping lines
+            double offsetMagnitude = Math.Sqrt(700.0 * 700.0 + 400.0 * 400.0); // ~806.23 units
+            // Text opposite rebars: rebars at -perpDirection, text at +perpDirection
+            Vector3d textOffsetDirection = isRightSide ? -perpDirection : perpDirection;
+            if (isFlipped)
+                textOffsetDirection = isRightSide ? perpDirection : -perpDirection; // Adjust for flipped leader
+                                                                                    // Fix for CS0029: Cannot implicitly convert type 'Autodesk.AutoCAD.Geometry.Vector3d' to 'Autodesk.AutoCAD.Geometry.Point3d'
+
+            // Original problematic line
+            // Point3d textOffset = textOffsetDirection * offsetMagnitude;
+
+            // Fixed line
+            Point3d textOffset = new Point3d(
+               textOffsetDirection.X * offsetMagnitude,
+               textOffsetDirection.Y * offsetMagnitude,
+               textOffsetDirection.Z * offsetMagnitude
+            );
+
+            // Find nearest distribution bar center at 0.25 * totalLength
+            double distBarPos = 0.25 * totalLength;
+            double nearestBarDist = Math.Round((distBarPos - barDiameter_d) / spacing_d) * spacing_d + barDiameter_d;
+            Point3d distBarCenter = offsetPt0 + (direction * nearestBarDist) - (perpDirection * (barDiameter_d / 2));
+
+            // Add reinforcement description for distribution bars at 0.25 * totalLength
+            string reinforcementDescription = $"Ø{barDiameter_d} @ {spacing_d}mm";
+            // Fix for CS0019: Operator '+' cannot be applied to operands of type 'Point3d' and 'Point3d'
+
+            // The issue occurs because `Point3d` does not support direct addition of two `Point3d` objects.
+            // Instead, you can use the `Add` method or work with `Vector3d` for vector arithmetic.
+
+            Point3d distTextPoint = distBarCenter.Add(new Vector3d(textOffset.X, textOffset.Y, textOffset.Z));
+            AddLeaderWithText(msBlkRec, trans, distBarCenter, reinforcementDescription, distTextPoint, isFlipped);
+
+            // Add reinforcement description for main bars at 0.75 * totalLength
+            reinforcementDescription = $"Ø{barDiameter_m} @ {spacing_m}mm";
+            Point3d mainBarPoint = offsetPt0 + (direction * (0.75 * totalLength));
+            // Fix for CS0019: Operator '+' cannot be applied to operands of type 'Point3d' and 'Point3d'
+
+            // Original problematic line
+            // Point3d mainTextPoint = mainBarPoint + textOffset + (textOffsetDirection * textHeight); // Vertical separation
+
+            // Fixed line
+            Point3d mainTextPoint = mainBarPoint.Add(new Vector3d(textOffset.X, textOffset.Y, textOffset.Z))
+                                                .Add(textOffsetDirection.MultiplyBy(textHeight));
+            AddLeaderWithText(msBlkRec, trans, mainBarPoint, reinforcementDescription, mainTextPoint, isFlipped);
+        }
+
+        private void AddLeaderWithText(BlockTableRecord msBlkRec, Transaction trans, Point3d attachPoint, string text,
+            Point3d textPoint, bool isFlipped = false)
+        {
+            ObjectId leaderLayerId = GetOrCreateLayer(msBlkRec.Database, trans, "Annotations", 4);
+            using (Leader leader = new Leader())
+            {
+                leader.SetDatabaseDefaults();
+                leader.LayerId = leaderLayerId;
+                leader.Dimasz = 200; // Arrow size
+                leader.HasArrowHead = true; // Explicitly enable arrow
+                leader.ColorIndex = 4; // Cyan for annotations
+
+                if (isFlipped)
+                {
+                    // Leader starts at text (top-right) and ends at attachPoint
+                    leader.AppendVertex(textPoint);
+                    leader.AppendVertex(attachPoint);
+                }
+                else
+                {
+                    // Leader starts at attachPoint and ends at text
+                    leader.AppendVertex(attachPoint);
+                    leader.AppendVertex(textPoint);
+                }
+
+                msBlkRec.AppendEntity(leader);
+                trans.AddNewlyCreatedDBObject(leader, true);
+
+                using (MText mtext = new MText())
+                {
+                    mtext.SetDatabaseDefaults();
+                    mtext.Contents = text;
+                    mtext.TextHeight = 150;
+                    mtext.LayerId = leaderLayerId;
+
+                    if (isFlipped)
+                    {
+                        mtext.Attachment = AttachmentPoint.TopRight;
+                        mtext.Location = textPoint; // Top-right corner at textPoint
+                    }
+                    else
+                    {
+                        mtext.Attachment = AttachmentPoint.BottomLeft;
+                        mtext.Location = textPoint; // Bottom-left corner at textPoint
+                    }
+
+                    msBlkRec.AppendEntity(mtext);
+                    trans.AddNewlyCreatedDBObject(mtext, true);
+                    leader.Annotation = mtext.ObjectId;
+                    leader.Annotative = AnnotativeStates.True;
+                    leader.EvaluateLeader();
+                }
+            }
+        }
         // Adds a rebar circle with hatching
         private void AddRebarCircle(BlockTableRecord msBlkRec, Transaction trans, Point3d center, double radius, ObjectId layerId)
         {
