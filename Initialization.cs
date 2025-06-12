@@ -14,6 +14,7 @@ using System.Windows.Shapes;
 using AcadLine = Autodesk.AutoCAD.DatabaseServices.Line;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using Autodesk.AutoCAD.Colors;
+using static System.Windows.Forms.LinkLabel;
 namespace Civil
 {
     public class Initialization : IExtensionApplication
@@ -653,6 +654,97 @@ namespace Civil
             }
         }
 
+        [CommandMethod("DRAWSlopes")]
+		public void DrawSlopeLines()
+		{
+			var ed = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument.Editor;
+			var db = Autodesk.AutoCAD.DatabaseServices.HostApplicationServices.WorkingDatabase;
+				try
+			   {
+					// Prompt user to select first line (lower)
+					PromptEntityOptions peo1 = new PromptEntityOptions("\nSelect lower parallel line: ");
+					peo1.SetRejectMessage("\nPlease select a line.");
+					peo1.AddAllowedClass(typeof(AcadLine), true);
+					PromptEntityResult per1 = ed.GetEntity(peo1);
+					if (per1.Status != PromptStatus.OK) return;
+
+					// Prompt user to select second line (higher)
+					PromptEntityOptions peo2 = new PromptEntityOptions("\nSelect higher parallel line: ");
+					peo2.SetRejectMessage("\nPlease select a line.");
+					peo2.AddAllowedClass(typeof(AcadLine), true);
+					PromptEntityResult per2 = ed.GetEntity(peo2);
+					if (per2.Status != PromptStatus.OK) return;
+
+					// Get number of lines from user
+					PromptIntegerOptions pio = new PromptIntegerOptions("\nEnter number of slope lines (3-50): ");
+					pio.LowerLimit = 3;
+					pio.UpperLimit = 50;
+					PromptIntegerResult pir = ed.GetInteger(pio);
+					if (pir.Status != PromptStatus.OK) return;
+					int numLines = pir.Value;
+
+				using (Transaction tr = db.TransactionManager.StartTransaction())
+				{
+					// Open the selected lines
+					AcadLine line1 = tr.GetObject(per1.ObjectId, OpenMode.ForRead) as AcadLine;
+					AcadLine line2 = tr.GetObject(per2.ObjectId, OpenMode.ForRead) as AcadLine;
+
+					// Verify lines are parallel
+					Vector3d dir1 = line1.EndPoint - line1.StartPoint;
+					Vector3d dir2 = line2.EndPoint - line2.StartPoint;
+								if (!dir1.IsParallelTo(dir2, new Tolerance(0.0001, 0.0001)))
+								{
+									ed.WriteMessage("\nError: Selected lines are not parallel.");
+									return;
+								}
+
+					// Get block table and block table record
+					BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+					BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
+
+					// Calculate perpendicular direction
+					Vector3d perpDir = dir1.CrossProduct(Vector3d.ZAxis).GetNormal();
+					Point3d startPt1 = line1.StartPoint;
+					Point3d startPt2 = line2.StartPoint;
+
+					// Treat first selected line as lower, second as higher (no swap)
+					// Calculate total distance between lines
+					double totalDist = (startPt2 - startPt1).Length;
+
+					// Calculate decreasing distances using arithmetic progression
+					double[] distances = new double[numLines + 1];
+					double sum = (numLines * (numLines + 1)) / 2.0; // Sum of 1 to numLines
+					double initialDist = totalDist / sum;
+
+					distances[0] = 0;
+					for (int i = 1; i <= numLines; i++)
+						{
+							distances[i] = distances[i - 1] + initialDist * (numLines - i + 1);
+						}
+
+					// Create slope lines
+					for (int i = 1; i <= numLines; i++)
+						{
+							double t = distances[i] / totalDist;
+							Point3d start = startPt1 + (startPt2 - startPt1) * t;
+							Point3d end = start + dir1;
+							AcadLine slopeLine = new AcadLine(start, end);
+							btr.AppendEntity(slopeLine);
+							tr.AddNewlyCreatedDBObject(slopeLine, true);
+						}
+
+							tr.Commit();
+					 }
+					}
+							catch (System.Exception ex)
+							{
+								ed.WriteMessage("\nError: " + ex.Message);
+							}
+						
+		}
+
+         
+         
         // Helper method to check if a point is outside the polygon
         private bool IsPointOutsidePolygon(Point3d point, Point3d[] polygon)
         {
