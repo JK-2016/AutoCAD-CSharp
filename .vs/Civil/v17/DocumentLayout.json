@@ -26,15 +26,11 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 5,
+          "SelectedChildIndex": 4,
           "Children": [
             {
               "$type": "Bookmark",
               "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
-            },
-            {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
             },
             {
               "$type": "Document",
@@ -46,8 +42,7 @@
               "RelativeToolTip": "CC_Wall_Input.cs",
               "ViewState": "AgIAAAkAAAAAAAAAAAAAAFcAAAANAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-03-12T16:15:00.795Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-03-12T16:15:00.795Z"
             },
             {
               "$type": "Document",
@@ -59,8 +54,7 @@
               "RelativeToolTip": "CC_Wall_Input.Designer.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAIAAAAfAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-03-12T16:12:12.943Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-03-12T16:12:12.943Z"
             },
             {
               "$type": "Document",
@@ -71,8 +65,7 @@
               "ToolTip": "D:\\AutoCad\\Civil\\CC_Wall_Input.cs [Design]",
               "RelativeToolTip": "CC_Wall_Input.cs [Design]",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-03-12T16:11:00.717Z",
-              "EditorCaption": " [Design]"
+              "WhenOpened": "2025-03-12T16:11:00.717Z"
             },
             {
               "$type": "Document",
@@ -82,7 +75,7 @@
               "RelativeDocumentMoniker": "Initialization.cs",
               "ToolTip": "D:\\AutoCad\\Civil\\Initialization.cs",
               "RelativeToolTip": "Initialization.cs",
-              "ViewState": "AgIAADMDAAAAAAAAAAAgwG4EAAAcAAAAAAAAAA==",
+              "ViewState": "AgIAAHIBAAAAAAAAAAAmwH4BAABYAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-03-12T15:23:36.446Z",
               "EditorCaption": ""

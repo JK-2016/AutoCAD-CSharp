@@ -13,6 +13,7 @@ using Autodesk.AutoCAD.GraphicsInterface;
 using System.Windows.Shapes;
 using AcadLine = Autodesk.AutoCAD.DatabaseServices.Line;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
+using Autodesk.AutoCAD.Colors;
 namespace Civil
 {
     public class Initialization : IExtensionApplication
@@ -361,8 +362,17 @@ namespace Civil
                     Pnts[22] = new Point3d(Pnts[20].X + cisternLength, cisternLevel-Wcthick_body, 0);
                     Pnts[23] = new Point3d(Pnts[22].X + (endSillLevel - foundationTopLevel - Wcthick_body) * endSillSlope, endSillLevel - Wcthick_body, 0);
 
-                    AcadLine cisBotLine = AddLine(msBlkRec, trans, new Point3d(Pnts[22].X-50, Pnts[22].Y, 0), Pnts[22], "Wall");
-                    cisBotLine = ExtendLine(cisBotLine, dsline1);//, Pnts[28]);
+                    AcadLine cisBotLine = AddLine(msBlkRec, trans, new Point3d(Pnts[9].X, Pnts[22].Y, 0), Pnts[22], "Wall");
+                   // cisBotLine.StartPoint= new Point3d(Pnts[9].X, Pnts[22].Y, 0);
+                    if (GetIntersectionPoint(cisBotLine, dsline) != null)
+                        cisBotLine = TrimLine(cisBotLine, dsline, Pnts[22]);
+                    else if (GetIntersectionPoint(cisBotLine, foundationRight) != null)
+                        cisBotLine = TrimLine(cisBotLine, foundationRight, Pnts[22]);
+                    else
+                        cisBotLine.StartPoint = new Point3d(Pnts[20].X, Pnts[22].Y, 0);
+                    cisBotLine.Color = Color.FromRgb(0, 255, 0);
+
+                    //cisBotLine = ExtendLine(cisBotLine, dsline1);//, Pnts[28]);
                     AcadLine cisTopLine = CreateOffsetLine(msBlkRec, trans, cisBotLine, Wcthick_body, null, "Wall");
 
 
