@@ -38,6 +38,7 @@ namespace Civil.Software
         public double FBH_o { get; private set; }
         public double RBH_o { get; private set; }
 
+        public bool rebar_option { get; private set; }
         public int rebar_m_o { get; private set; }
         public int spacing_m_o { get; private set; }
 
@@ -98,6 +99,7 @@ namespace Civil.Software
                 ROF_o = rof;
                 FBH_o = fbh;
                 RBH_o = rbh;
+                rebar_option = Yes.Checked;
                 rebar_m_o = rebar_m;
                 spacing_m_o = spac_m;
                 rebar_d_o = rebar_d;

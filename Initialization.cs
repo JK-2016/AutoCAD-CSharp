@@ -19,8 +19,8 @@ namespace Civil
 {
     public class Initialization : IExtensionApplication
     {
-        [CommandMethod("MyFirstLine")]
-        public void cmdMyFirst()
+        [CommandMethod("DrawWallSection")]
+        public void wallSection()
         {
             Editor ed = acadApp.DocumentManager.MdiActiveDocument.Editor;
             // Prompt user to specify the insertion point
@@ -41,6 +41,7 @@ namespace Civil
                 double ROF = form.ROF_o * 1000;
                 double FBH = form.FBH_o * 1000;
                 double RBH = form.RBH_o * 1000;
+                bool rebar_opt = form.rebar_option;
                 double rebar_m = (double)form.rebar_m_o;
                 double spacing_m = (double)form.spacing_m_o;
                 double rebar_d = (double)form.rebar_d_o;
@@ -77,16 +78,17 @@ namespace Civil
 
                     // Add dimensions for horizontal and vertical measurements
                     int dim_dist = 200;
-                    if (RB != 0)
                     AddDimension(msBlkRec, trans, Pnts[0], Pnts[1], new Point3d((Pnts[0].X + Pnts[0].X) / 2, Pnts[0].Y + dim_dist, 0), dimStyleId, 0);
-
-                    {
-                        AddDimension(msBlkRec, trans, Pnts[3], Pnts[2], new Point3d((Pnts[3].X + Pnts[2].X) / 2, Pnts[3].Y + dim_dist, 0), dimStyleId, 0);
-                    }
-                    if (FB != 0)
-                    {
-                        AddDimension(msBlkRec, trans, Pnts[9], Pnts[8], new Point3d((Pnts[9].X + Pnts[8].X) / 2, Pnts[8].Y + dim_dist, 0), dimStyleId, 0);
-                    }
+                    AddDimension(msBlkRec, trans, Pnts[3], Pnts[2], new Point3d((Pnts[3].X + Pnts[2].X) / 2, Pnts[3].Y + dim_dist, 0), dimStyleId, 0);
+                    AddDimension(msBlkRec, trans, Pnts[9], Pnts[8], new Point3d((Pnts[9].X + Pnts[8].X) / 2, Pnts[8].Y + dim_dist, 0), dimStyleId, 0);
+                    //if (RB != 0)
+                    //{
+                    //    AddDimension(msBlkRec, trans, Pnts[3], Pnts[2], new Point3d((Pnts[3].X + Pnts[2].X) / 2, Pnts[3].Y + dim_dist, 0), dimStyleId, 0);
+                    //}
+                    //if (FB != 0)
+                    //{
+                    //    AddDimension(msBlkRec, trans, Pnts[9], Pnts[8], new Point3d((Pnts[9].X + Pnts[8].X) / 2, Pnts[8].Y + dim_dist, 0), dimStyleId, 0);
+                    //}
                     AddDimension(msBlkRec, trans, Pnts[3], Pnts[4], new Point3d((Pnts[3].X + Pnts[4].X) / 2, Pnts[3].Y + dim_dist, 0), dimStyleId, 0);
                     AddDimension(msBlkRec, trans, Pnts[7], Pnts[8], new Point3d((Pnts[7].X + Pnts[8].X) / 2, Pnts[8].Y + dim_dist, 0), dimStyleId, 0);
 
@@ -111,13 +113,17 @@ namespace Civil
                         AddDimension(msBlkRec, trans, Pnts[9], Pnts[8], new Point3d(Pnts[8].X + dim_dist, 0.5 * (Pnts[9].Y + Pnts[8].Y), 0), dimStyleId, Math.PI * 0.5);
                         batter = true;
                     }
-                    // Add reinforcement elements
-                    double topld = Math.Min(50 * rebar_d, St-150);
-                    double botld = Math.Min(50 * rebar_d, Ft-150);
+                    if(rebar_opt)
+                    {
+                        // Add reinforcement elements
+                        double topld = Math.Min(50 * rebar_d, St - 150);
+                        double botld = Math.Min(50 * rebar_d, Ft - 150);
 
-                    ObjectId rebarLayerId = GetOrCreateLayer(msBlkRec.Database, trans, "Reinforcement", 2);
-                    //AddRebarCircle(msBlkRec, trans, Pnts[0], 0.2 / 2, rebarLayerId);
-                    AddReinforcement(msBlkRec, trans, Pnts[0], Pnts[9], Pnts[8], 100,rebar_m, spacing_m, rebar_d, spacing_d, topld, botld, batter);
+                        ObjectId rebarLayerId = GetOrCreateLayer(msBlkRec.Database, trans, "Reinforcement", 2);
+                        //AddRebarCircle(msBlkRec, trans, Pnts[0], 0.2 / 2, rebarLayerId);
+                        AddReinforcement(msBlkRec, trans, Pnts[0], Pnts[9], Pnts[8], 100, rebar_m, spacing_m, rebar_d, spacing_d, topld, botld, batter);
+                    }
+                   
                      
                     trans.Commit();
 
@@ -826,6 +832,10 @@ namespace Civil
         // Adds a dimension between two points
         private void AddDimension(BlockTableRecord msBlkRec, Transaction trans, Point3d pt1, Point3d pt2, Point3d dimLinePos, ObjectId dimStyleId, double rot)
         {
+            if(pt1.DistanceTo(pt2) < 0.01)
+            {
+                return; // Avoid creating a dimension for points that are too close
+            }
             RotatedDimension dim = new RotatedDimension(rot, pt1, pt2, dimLinePos, "", dimStyleId);
             ObjectId dimLayerId = GetOrCreateLayer(msBlkRec.Database, trans, "Dimensions", 3);
             dim.LayerId = dimLayerId;
