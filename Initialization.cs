@@ -332,14 +332,14 @@ namespace Civil
                    
                     // Body wall
                     AcadLine fTopLine = AddLine(msBlkRec, trans, Pnts[10], Pnts[21], "Wall"); // Base
-                    AcadLine line2 = AddLine(msBlkRec, trans, Pnts[9], Pnts[19], "Wall"); // U/S batter
+                    AcadLine usLine = AddLine(msBlkRec, trans, Pnts[9], Pnts[19], "Wall"); // U/S batter
                     AcadLine crestLine = AddLine(msBlkRec, trans, Pnts[19], Pnts[18], "Wall"); // Crest
                     AcadLine dsline = AddLine(msBlkRec, trans, Pnts[18], Pnts[20], "Wall"); // D/S batter
-                    AddLine(msBlkRec, trans, Pnts[10], Pnts[11], "Wall"); // Left thickness
+                    AcadLine foundationLeft = AddLine(msBlkRec, trans, Pnts[10], Pnts[11], "Wall"); // Left thickness
                     AcadLine foundationRight = AddLine(msBlkRec, trans, Pnts[12], Pnts[21], "Wall"); // Right thickness
                     AddLine(msBlkRec, trans, Pnts[11], Pnts[12], "Wall"); // Foundation bottom
                                      // Wearing coat Offset 
-                    AcadLine usLine1 = CreateOffsetLine(msBlkRec, trans, line2, -Wcthick_body, fTopLine, "Wall");
+                    AcadLine usLine1 = CreateOffsetLine(msBlkRec, trans, usLine, -Wcthick_body, fTopLine, "Wall");
                     AcadLine crestLine1 = CreateOffsetLine(msBlkRec, trans, crestLine, -Wcthick_body, usLine1, "Wall");
                     AcadLine dsline1 = CreateOffsetLine(msBlkRec, trans, dsline, -Wcthick_body, crestLine1, "Wall");
 
@@ -353,29 +353,37 @@ namespace Civil
                     AddLine(msBlkRec, trans, Pnts[2], Pnts[3], "Wall");//cut-off slope
                     AddLine(msBlkRec, trans, Pnts[1], Pnts[4], "Wall");//left thick of apron
                     // Create offset lines for wearing coat and apron thickness
-                    AcadLine line3 = CreateOffsetLine(msBlkRec, trans, line1, -Wcthick_apron, line2, "Wall");
-                    if (line3 == null)
+                    AcadLine wcApron = CreateOffsetLine(msBlkRec, trans, line1, -Wcthick_apron, usLine, "Wall");
+
+                    if (wcApron == null)
                     {
                         ed.WriteMessage("\nError: Failed to create wearing coat offset line.");
                         return;
                     }
-                    AcadLine line4 = CreateOffsetLine(msBlkRec, trans, line3, apron_thick, line2, "Wall");
-                    if (line4 == null)
+                    if (GetIntersectionPoint(wcApron, foundationLeft) != null)
+                        wcApron = TrimLine(wcApron, foundationLeft, Pnts[3]);
+
+                    AcadLine apronBottomLine = CreateOffsetLine(msBlkRec, trans, wcApron, apron_thick, usLine, "Wall");
+                    if (apronBottomLine == null)
                     {
                         ed.WriteMessage("\nError: Failed to create apron thickness offset line.");
                         return;
                     }
+                    if (GetIntersectionPoint(apronBottomLine, foundationLeft) != null)
+                        apronBottomLine = TrimLine(apronBottomLine, foundationLeft, Pnts[3]);
                     // Cistern and end sill points
                     Pnts[22] = new Point3d(Pnts[20].X + cisternLength, cisternLevel-Wcthick_body, 0);
                     Pnts[23] = new Point3d(Pnts[22].X + (endSillLevel - foundationTopLevel - Wcthick_body) * endSillSlope, endSillLevel - Wcthick_body, 0);
 
                     AcadLine cisBotLine = AddLine(msBlkRec, trans, new Point3d(Pnts[9].X, Pnts[22].Y, 0), Pnts[22], "Wall");
                    // cisBotLine.StartPoint= new Point3d(Pnts[9].X, Pnts[22].Y, 0);
-                    if (GetIntersectionPoint(cisBotLine, dsline) != null)
+                   // if (GetIntersectionPoint(cisBotLine, dsline) != null)
                         cisBotLine = TrimLine(cisBotLine, dsline, Pnts[22]);
-                    else if (GetIntersectionPoint(cisBotLine, foundationRight) != null)
+                    //else if (GetIntersectionPoint(cisBotLine, foundationRight) != null)
                         cisBotLine = TrimLine(cisBotLine, foundationRight, Pnts[22]);
-                    else
+                    //else
+                    //double startx = cisBotLine.StartPoint.X;
+                      if (cisBotLine.StartPoint.X == Pnts[9].X)
                         cisBotLine.StartPoint = new Point3d(Pnts[20].X, Pnts[22].Y, 0);
                     cisBotLine.Color = Color.FromRgb(0, 255, 0);
 
@@ -415,11 +423,12 @@ namespace Civil
                     AcadLine cisternBottomLine =AddLine(msBlkRec, trans, Pnts[13], new Point3d(Pnts[9].X, Pnts[13].Y, 0), "Wall");
                     AcadLine rightLine = AddLine(msBlkRec, trans, Pnts[14], Pnts[25], "Wall");
                     sillTopLine = ExtendLine(sillTopLine, rightLine);
-                    if(GetIntersectionPoint(cisternBottomLine, dsline)!=null)
+                    //if(GetIntersectionPoint(cisternBottomLine, dsline)!=null)
                         cisternBottomLine = TrimLine(cisternBottomLine, dsline, Pnts[13]);
-                    else if(GetIntersectionPoint(cisternBottomLine, foundationRight) != null)
+                    //else if(GetIntersectionPoint(cisternBottomLine, foundationRight) != null)
                         cisternBottomLine = TrimLine(cisternBottomLine, foundationRight, Pnts[13]);
-                    else
+                    //else
+                    if(cisternBottomLine.StartPoint.X == Pnts[9].X)
                         cisternBottomLine.EndPoint = new Point3d(Pnts[20].X, Pnts[13].Y, 0);
 
                     CreateOffsetLine(msBlkRec, trans, sillTopLine, -Wcthick_body, sillSlopeInLine, "Wall");
@@ -1244,7 +1253,7 @@ namespace Civil
             line.IntersectWith(otherLine, Intersect.OnBothOperands, intersectionPoints, IntPtr.Zero, IntPtr.Zero);
 
             if (intersectionPoints.Count == 0)
-                return null;
+                return line;
 
             Point3d intersection = intersectionPoints[0]; // Take first intersection
 
@@ -1297,7 +1306,7 @@ namespace Civil
             line.IntersectWith(otherLine, Intersect.ExtendThis, intersectionPoints, IntPtr.Zero, IntPtr.Zero);
 
             if (intersectionPoints.Count == 0)
-                return null;
+                return line;
 
             Point3d intersection = intersectionPoints[0]; // Take first intersection
 
