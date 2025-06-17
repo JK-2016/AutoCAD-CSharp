@@ -373,7 +373,7 @@ namespace Civil
                         apronBottomLine = TrimLine(apronBottomLine, foundationLeft, Pnts[3]);
                     // Cistern and end sill points
                     Pnts[22] = new Point3d(Pnts[20].X + cisternLength, cisternLevel-Wcthick_body, 0);
-                    Pnts[23] = new Point3d(Pnts[22].X + (endSillLevel - foundationTopLevel - Wcthick_body) * endSillSlope, endSillLevel - Wcthick_body, 0);
+                    Pnts[23] = new Point3d(Pnts[22].X + ((endSillLevel - Wcthick_body)-(cisternLevel - Wcthick_body) ) * endSillSlope, endSillLevel - Wcthick_body, 0);
 
                     AcadLine cisBotLine = AddLine(msBlkRec, trans, new Point3d(Pnts[9].X, Pnts[22].Y, 0), Pnts[22], "Wall");
                    // cisBotLine.StartPoint= new Point3d(Pnts[9].X, Pnts[22].Y, 0);
