@@ -253,7 +253,7 @@ namespace Civil
                 if (!ReadAndValidateCell(27, 2, out DS_cutOff_thickness, "D/S cut-off thickness")) return; DS_cutOff_thickness *= 1000;
 
                 // Validate level hierarchy
-                if (!(crestLevel > foundationTopLevel && foundationTopLevel > foundationBottomLevel))
+                if (!(crestLevel > foundationTopLevel && foundationTopLevel >= foundationBottomLevel))
                 {
                     ed.WriteMessage("\nInvalid level hierarchy: crestLevel ({0}) must be greater than foundationTopLevel ({1}), which must be greater than foundationBottomLevel ({2}).", crestLevel, foundationTopLevel, foundationBottomLevel);
                     return;
