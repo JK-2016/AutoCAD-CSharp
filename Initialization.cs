@@ -828,7 +828,7 @@ namespace Civil
                 ed.WriteMessage("\nStart point not selected. Command cancelled.");
                 return;
             }
-            Point3d patternStartPoint = pprStart.Value.TransformBy(ed.CurrentUserCoordinateSystem.Inverse());
+            Point3d patternStartPoint = ppr1.Value.TransformBy(ed.CurrentUserCoordinateSystem.Inverse());
 
             // Step 5: Calculate spacing
             double defaultSpacing = objectPoint1.DistanceTo(objectPoint2);
@@ -934,47 +934,45 @@ namespace Civil
                     // Snap start point to the line
                     Point3d copyPosition = selectedLine.GetClosestPointTo(patternStartPoint, false);
 
-                    // Calculate rotation angle to align objectPoint2 with the line
-                    double angle = patternDirection.GetAngleTo(lineDirection);
-                    // Use cross product to determine rotation direction (Z-component for 2D)
-                    Vector3d crossProduct = patternDirection.CrossProduct(lineDirection);
+                    // Select patternEndPoint based on patternDirection.X
+                    Point3d patternEndPoint = patternDirection.X > 0 ? lineEndPoint : lineStartPoint;
+
+                    // Set targetDirection for rotation
+                    Vector3d targetDirection = patternDirection.X > 0 ? lineDirection : -lineDirection;
+
+                    // Calculate rotation angle
+                    double angle = patternDirection.GetAngleTo(targetDirection);
+                    Vector3d crossProduct = patternDirection.CrossProduct(targetDirection);
                     if (crossProduct.Z < 0)
                         angle = -angle;
 
-                    // Check for left-to-right patterning (mirror if patternDirection.X > 0)
-                    Matrix3d mirrorTransform = Matrix3d.Identity;
-                    //if (patternDirection.X > 0)
-                    //{
-                    //    Vector3d mirrorAxis = new Vector3d(-lineDirection.Y, lineDirection.X, 0);
-                    //    mirrorTransform = Matrix3d.Mirroring(new Line3d(objectPoint1, objectPoint1 + mirrorAxis));
-                    //}
+                    // Normalize angle to [-π, π]
+                    if (angle > Math.PI)
+                        angle -= 2 * Math.PI;
+                    else if (angle < -Math.PI)
+                        angle += 2 * Math.PI;
 
                     // Compute direction after rotation
                     Matrix3d rotation = Matrix3d.Rotation(angle, Vector3d.ZAxis, objectPoint1);
-                    Matrix3d preDisplacementTransform = rotation * mirrorTransform;
-                    Point3d transformedPoint1 = objectPoint1.TransformBy(preDisplacementTransform);
-                    Point3d transformedPoint2 = objectPoint2.TransformBy(preDisplacementTransform);
+                    Point3d transformedPoint1 = objectPoint1.TransformBy(rotation);
+                    Point3d transformedPoint2 = objectPoint2.TransformBy(rotation);
                     Vector3d postRotationDirection = (transformedPoint2 - transformedPoint1).GetNormal();
 
-                    // Determine patternEndPoint based on post-rotation direction
-                    Vector3d vectorToStart = lineStartPoint - copyPosition;
-                    Vector3d vectorToEnd = lineEndPoint - copyPosition;
-                    double dotStart = vectorToStart.GetNormal().DotProduct(postRotationDirection);
-                    double dotEnd = vectorToEnd.GetNormal().DotProduct(postRotationDirection);
-                    Point3d patternEndPoint = dotStart > 0 || (dotStart > dotEnd && dotStart <= 0) ? lineStartPoint : lineEndPoint;
+                    // Set lineDirection toward patternEndPoint
+                    Vector3d vectorToPatternEnd = (patternEndPoint - copyPosition).GetNormal();
+                    lineDirection = patternDirection.X > 0 ? lineDirection : -lineDirection;
 
-                    // Ensure lineDirection points toward patternEndPoint
-                    Vector3d vectorToPatternEnd = patternEndPoint - copyPosition;
-                    if (lineDirection.DotProduct(vectorToPatternEnd.GetNormal()) < 0)
-                    {
-                        lineDirection = -lineDirection;
-                    }
-
-                    // Debug directions and positions
+                    // Debug output
+                    ed.WriteMessage($"\nObjectPoint1: {objectPoint1}");
+                    ed.WriteMessage($"\nObjectPoint2: {objectPoint2}");
                     ed.WriteMessage($"\nPre-rotation direction: ({patternDirection.X:F2}, {patternDirection.Y:F2})");
+                    ed.WriteMessage($"\nTarget direction: ({targetDirection.X:F2}, {targetDirection.Y:F2})");
                     ed.WriteMessage($"\nRotation angle: {angle:F4} radians");
-                    ed.WriteMessage($"\nPost-rotation direction: ({postRotationDirection.X:F2}, {postRotationDirection.Y:F2}), Line direction: ({lineDirection.X:F2}, {lineDirection.Y:F2})");
-                    ed.WriteMessage($"\nStart: {copyPosition}, End: {patternEndPoint}");
+                    ed.WriteMessage($"\nPost-rotation direction: ({postRotationDirection.X:F2}, {postRotationDirection.Y:F2})");
+                    ed.WriteMessage($"\nLine direction: ({lineDirection.X:F2}, {lineDirection.Y:F2})");
+                    ed.WriteMessage($"\nLine StartPoint: {lineStartPoint}, Line EndPoint: {lineEndPoint}");
+                    ed.WriteMessage($"\nPattern Start: {copyPosition}, Pattern End: {patternEndPoint}");
+                    ed.WriteMessage($"\nTransformed objectPoint2: {transformedPoint2}");
 
                     int actualCopies = 0;
                     int iterationCount = 0;
@@ -992,9 +990,9 @@ namespace Civil
                         if (distanceToEnd < spacing - tolerance)
                             break;
 
-                        // Create transformation: mirror, rotate, displace
+                        // Create transformation: rotate, displace
                         Vector3d displacement = copyPosition - objectPoint1;
-                        Matrix3d transform = Matrix3d.Displacement(displacement) * rotation * mirrorTransform;
+                        Matrix3d transform = Matrix3d.Displacement(displacement) * rotation;
 
                         // Verify objectPoint2 is on the line after transformation
                         Point3d transformedPoint2Final = objectPoint2.TransformBy(transform);
@@ -1030,7 +1028,6 @@ namespace Civil
                 }
             }
         }
-
 
 
 
