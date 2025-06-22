@@ -15,6 +15,8 @@ using AcadLine = Autodesk.AutoCAD.DatabaseServices.Line;
 using Application = Autodesk.AutoCAD.ApplicationServices.Application;
 using Autodesk.AutoCAD.Colors;
 using static System.Windows.Forms.LinkLabel;
+using System.Linq;
+
 namespace Civil
 {
     public class Initialization : IExtensionApplication
@@ -758,8 +760,288 @@ namespace Civil
 						
 		}
 
-         
-         
+        [CommandMethod("PatternAlongLine", CommandFlags.Modal | CommandFlags.Redraw)]
+
+        public void PatternAlongLineCommand()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Database db = doc.Database;
+            Editor ed = doc.Editor;
+            const double tolerance = 1e-3;
+            const int maxIterations = 1000;
+
+            // Step 1: Select objects to pattern
+            PromptSelectionOptions pso = new PromptSelectionOptions();
+            pso.MessageForAdding = "\nSelect objects to pattern: ";
+            pso.AllowDuplicates = false;
+            PromptSelectionResult psr = ed.GetSelection(pso);
+            if (psr.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nNo objects selected. Command cancelled.");
+                return;
+            }
+            ObjectIdCollection objectIdsToPattern = new ObjectIdCollection(psr.Value.GetObjectIds());
+
+            // Step 2: Pick two points on objects
+            PromptPointOptions ppo1 = new PromptPointOptions("\nPick first point on objects (to be coincident with line): ");
+            PromptPointResult ppr1 = ed.GetPoint(ppo1);
+            if (ppr1.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nFirst point not selected. Command cancelled.");
+                return;
+            }
+            Point3d objectPoint1 = ppr1.Value.TransformBy(ed.CurrentUserCoordinateSystem.Inverse());
+
+            PromptPointOptions ppo2 = new PromptPointOptions("\nPick second point on objects (to be coincident with line after rotation): ");
+            ppo2.UseBasePoint = true;
+            ppo2.BasePoint = objectPoint1;
+            PromptPointResult ppr2 = ed.GetPoint(ppo2);
+            if (ppr2.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nSecond point not selected. Command cancelled.");
+                return;
+            }
+            Point3d objectPoint2 = ppr2.Value.TransformBy(ed.CurrentUserCoordinateSystem.Inverse());
+
+            if (objectPoint1.DistanceTo(objectPoint2) < tolerance)
+            {
+                ed.WriteMessage("\nPicked points are too close. Command cancelled.");
+                return;
+            }
+
+            // Step 3: Select the line
+            PromptEntityOptions peo = new PromptEntityOptions("\nSelect the line to pattern along: ");
+            peo.SetRejectMessage("\nSelected object is not a Line.");
+            peo.AddAllowedClass(typeof(AcadLine), true);
+            PromptEntityResult per = ed.GetEntity(peo);
+            if (per.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nNo line selected. Command cancelled.");
+                return;
+            }
+
+            // Step 4: Pick start point on the line
+            PromptPointOptions ppoStart = new PromptPointOptions("\nPick start point on the line: ");
+            PromptPointResult pprStart = ed.GetPoint(ppoStart);
+            if (pprStart.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nStart point not selected. Command cancelled.");
+                return;
+            }
+            Point3d patternStartPoint = pprStart.Value.TransformBy(ed.CurrentUserCoordinateSystem.Inverse());
+
+            // Step 5: Calculate spacing
+            double defaultSpacing = objectPoint1.DistanceTo(objectPoint2);
+            using (Transaction trExtents = db.TransactionManager.StartTransaction())
+            {
+                double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+                bool hasExtents = false;
+
+                foreach (ObjectId objId in objectIdsToPattern)
+                {
+                    Entity entity = trExtents.GetObject(objId, OpenMode.ForRead) as Entity;
+                    if (entity != null)
+                    {
+                        try
+                        {
+                            Extents3d extents = entity.GeometricExtents;
+                            if (extents.MinPoint != extents.MaxPoint)
+                            {
+                                minX = Math.Min(minX, extents.MinPoint.X);
+                                minY = Math.Min(minY, extents.MinPoint.Y);
+                                maxX = Math.Max(maxX, extents.MaxPoint.X);
+                                maxY = Math.Max(maxY, extents.MaxPoint.Y);
+                                hasExtents = true;
+                            }
+                        }
+                        catch
+                        {
+                            continue;
+                        }
+                    }
+                }
+
+                if (hasExtents)
+                {
+                    double extentX = maxX - minX;
+                    double extentY = maxY - minY;
+                    PromptKeywordOptions pkoSpacing = new PromptKeywordOptions("\nSelect spacing method [Extents/Picked points]: ", "Extents Picked");
+                    pkoSpacing.AllowNone = false;
+                    pkoSpacing.Keywords.Default = "Picked";
+                    PromptResult prSpacing = ed.GetKeywords(pkoSpacing);
+                    if (prSpacing.Status != PromptStatus.OK)
+                    {
+                        ed.WriteMessage("\nSpacing method not selected. Command cancelled.");
+                        trExtents.Abort();
+                        return;
+                    }
+
+                    if (prSpacing.StringResult == "Extents")
+                    {
+                        PromptKeywordOptions pkoExtent = new PromptKeywordOptions($"\nUse X extent ({extentX:F2}) or Y extent ({extentY:F2})? [X/Y]: ", "X Y");
+                        pkoExtent.AllowNone = false;
+                        pkoExtent.Keywords.Default = "X";
+                        PromptResult prExtent = ed.GetKeywords(pkoExtent);
+                        if (prExtent.Status != PromptStatus.OK)
+                        {
+                            ed.WriteMessage("\nExtent direction not selected. Command cancelled.");
+                            trExtents.Abort();
+                            return;
+                        }
+                        defaultSpacing = prExtent.StringResult == "X" ? extentX : extentY;
+                        if (defaultSpacing <= 0)
+                            defaultSpacing = objectPoint1.DistanceTo(objectPoint2);
+                    }
+                }
+
+                trExtents.Commit();
+            }
+
+            PromptDoubleOptions pdo = new PromptDoubleOptions($"\nEnter spacing (default: {defaultSpacing:F2}): ");
+            pdo.AllowNegative = false;
+            pdo.AllowZero = false;
+            pdo.DefaultValue = defaultSpacing;
+            pdo.UseDefaultValue = true;
+            PromptDoubleResult pdr = ed.GetDouble(pdo);
+            if (pdr.Status != PromptStatus.OK)
+            {
+                ed.WriteMessage("\nInvalid spacing entered. Command cancelled.");
+                return;
+            }
+            double spacing = pdr.Value;
+
+            // Step 6: Copy, rotate, and pattern along the line
+            using (Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                try
+                {
+                    BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                    BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
+                    AcadLine selectedLine = tr.GetObject(per.ObjectId, OpenMode.ForRead) as AcadLine;
+                    if (selectedLine == null)
+                    {
+                        ed.WriteMessage("\nError: Could not retrieve the selected line.");
+                        tr.Abort();
+                        return;
+                    }
+
+                    Point3d lineStartPoint = selectedLine.StartPoint;
+                    Point3d lineEndPoint = selectedLine.EndPoint;
+                    Vector3d lineDirection = (lineEndPoint - lineStartPoint).GetNormal();
+                    Vector3d patternDirection = (objectPoint2 - objectPoint1).GetNormal();
+                    double distanceBetweenPoints = objectPoint1.DistanceTo(objectPoint2);
+
+                    // Snap start point to the line
+                    Point3d copyPosition = selectedLine.GetClosestPointTo(patternStartPoint, false);
+
+                    // Calculate rotation angle to align objectPoint2 with the line
+                    double angle = patternDirection.GetAngleTo(lineDirection);
+                    // Use cross product to determine rotation direction (Z-component for 2D)
+                    Vector3d crossProduct = patternDirection.CrossProduct(lineDirection);
+                    if (crossProduct.Z < 0)
+                        angle = -angle;
+
+                    // Check for left-to-right patterning (mirror if patternDirection.X > 0)
+                    Matrix3d mirrorTransform = Matrix3d.Identity;
+                    //if (patternDirection.X > 0)
+                    //{
+                    //    Vector3d mirrorAxis = new Vector3d(-lineDirection.Y, lineDirection.X, 0);
+                    //    mirrorTransform = Matrix3d.Mirroring(new Line3d(objectPoint1, objectPoint1 + mirrorAxis));
+                    //}
+
+                    // Compute direction after rotation
+                    Matrix3d rotation = Matrix3d.Rotation(angle, Vector3d.ZAxis, objectPoint1);
+                    Matrix3d preDisplacementTransform = rotation * mirrorTransform;
+                    Point3d transformedPoint1 = objectPoint1.TransformBy(preDisplacementTransform);
+                    Point3d transformedPoint2 = objectPoint2.TransformBy(preDisplacementTransform);
+                    Vector3d postRotationDirection = (transformedPoint2 - transformedPoint1).GetNormal();
+
+                    // Determine patternEndPoint based on post-rotation direction
+                    Vector3d vectorToStart = lineStartPoint - copyPosition;
+                    Vector3d vectorToEnd = lineEndPoint - copyPosition;
+                    double dotStart = vectorToStart.GetNormal().DotProduct(postRotationDirection);
+                    double dotEnd = vectorToEnd.GetNormal().DotProduct(postRotationDirection);
+                    Point3d patternEndPoint = dotStart > 0 || (dotStart > dotEnd && dotStart <= 0) ? lineStartPoint : lineEndPoint;
+
+                    // Ensure lineDirection points toward patternEndPoint
+                    Vector3d vectorToPatternEnd = patternEndPoint - copyPosition;
+                    if (lineDirection.DotProduct(vectorToPatternEnd.GetNormal()) < 0)
+                    {
+                        lineDirection = -lineDirection;
+                    }
+
+                    // Debug directions and positions
+                    ed.WriteMessage($"\nPre-rotation direction: ({patternDirection.X:F2}, {patternDirection.Y:F2})");
+                    ed.WriteMessage($"\nRotation angle: {angle:F4} radians");
+                    ed.WriteMessage($"\nPost-rotation direction: ({postRotationDirection.X:F2}, {postRotationDirection.Y:F2}), Line direction: ({lineDirection.X:F2}, {lineDirection.Y:F2})");
+                    ed.WriteMessage($"\nStart: {copyPosition}, End: {patternEndPoint}");
+
+                    int actualCopies = 0;
+                    int iterationCount = 0;
+
+                    while (true)
+                    {
+                        if (iterationCount >= maxIterations)
+                        {
+                            ed.WriteMessage("\nMaximum iterations reached. Stopping.");
+                            break;
+                        }
+                        iterationCount++;
+
+                        double distanceToEnd = copyPosition.DistanceTo(patternEndPoint);
+                        if (distanceToEnd < spacing - tolerance)
+                            break;
+
+                        // Create transformation: mirror, rotate, displace
+                        Vector3d displacement = copyPosition - objectPoint1;
+                        Matrix3d transform = Matrix3d.Displacement(displacement) * rotation * mirrorTransform;
+
+                        // Verify objectPoint2 is on the line after transformation
+                        Point3d transformedPoint2Final = objectPoint2.TransformBy(transform);
+                        Point3d closestPointOnLine = selectedLine.GetClosestPointTo(transformedPoint2Final, false);
+                        if (transformedPoint2Final.DistanceTo(closestPointOnLine) > tolerance)
+                        {
+                            ed.WriteMessage($"\nWarning: objectPoint2 at {transformedPoint2Final} is not on the line after transformation.");
+                        }
+
+                        foreach (ObjectId objId in objectIdsToPattern)
+                        {
+                            Entity originalEntity = tr.GetObject(objId, OpenMode.ForRead) as Entity;
+                            if (originalEntity != null)
+                            {
+                                Entity newEntity = originalEntity.Clone() as Entity;
+                                newEntity.TransformBy(transform);
+                                btr.AppendEntity(newEntity);
+                                tr.AddNewlyCreatedDBObject(newEntity, true);
+                            }
+                        }
+
+                        actualCopies++;
+                        copyPosition = selectedLine.GetClosestPointTo(copyPosition + (lineDirection * spacing), false);
+                    }
+
+                    tr.Commit();
+                    ed.WriteMessage($"\nPatterned {objectIdsToPattern.Count} object(s) with {actualCopies} copies at {spacing:F2} spacing.");
+                }
+                catch (Autodesk.AutoCAD.Runtime.Exception ex)
+                {
+                    ed.WriteMessage($"\nError: {ex.Message}");
+                    tr.Abort();
+                }
+            }
+        }
+
+
+
+
+
+
+
+
+
+
+
+
         // Helper method to check if a point is outside the polygon
         private bool IsPointOutsidePolygon(Point3d point, Point3d[] polygon)
         {
