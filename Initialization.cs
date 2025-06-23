@@ -762,6 +762,72 @@ namespace Civil
 
         [CommandMethod("PatternAlongLine", CommandFlags.Modal | CommandFlags.Redraw)]
 
+        // Step-by-step instructions for using the PatternAlongLineCommand:
+
+        // 1. **Start the Command**:
+        //    - Enter "PatternAlongLine" in the AutoCAD command line and press Enter to initiate the command.
+
+        // 2. **Select Objects to Pattern**:
+        //    - Select the objects you want to pattern along a line (e.g., lines, circles, blocks).
+        //    - Press Enter when done selecting.
+
+        // 3. **Pick First Point on Objects**:
+        //    - Pick a point on the selected objects that will be coincident with the line (this defines the reference point for positioning).
+        //    - Click a point in the drawing area.
+
+        // 4. **Pick Second Point on Objects**:
+        //    - Pick a second point on the objects to define the direction for rotation alignment with the line.
+        //    - Ensure this point is not too close to the first point.
+        //    - Click another point, typically to the right or left of the first point.
+
+        // 5. **Select the Line**:
+        //    - Select a single straight line (AcadLine) in the drawing to pattern the objects along.
+        //    - Click the line in the drawing area.
+
+        // 6. **Pick Start Point on the Line**:
+        //    - Pick a point on or near the line to specify where the pattern should start.
+        //    - This point will be snapped to the closest point on the line.
+        //    - Click a point, e.g., at the midpoint or near an endpoint of the line.
+
+        // 7. **Choose Spacing Method** (if applicable):
+        //    - If the selected objects have valid extents, you’ll be prompted to choose a spacing method:
+        //      - Enter "Extents" to use the X or Y extent of the objects, or "Picked" to use the distance between the two picked points (default).
+        //      - Press Enter to confirm.
+        //    - If "Extents" is chosen, select "X" or "Y" for the extent direction and press Enter.
+
+        // 8. **Enter Spacing**:
+        //    - Specify the spacing between patterned objects (default is the distance between the two picked points, e.g., 28.72 units).
+        //    - Enter a positive number or press Enter to accept the default.
+
+        // 9. **View the Pattern**:
+        //    - The pattern will be drawn along the line, starting at the snapped start point and extending toward the line’s endpoint (left-to-right if second point is right of first, or right-to-left otherwise).
+        //    - The pattern will be visible immediately after creation.
+
+        // 10. **Choose Mirroring Option**:
+        //     - After the pattern is drawn, you’ll be prompted to mirror the pattern about the line:
+        //       - Enter "Mirror" to reflect the patterned objects across the line, or "Keep" to leave them as is (default).
+        //       - Press Enter to confirm.
+        //     - If "Mirror" is chosen, the pattern will be updated to show the mirrored objects.
+
+        // 11. **Review Debug Output**:
+        //     - Check the AutoCAD command line for debug information, including:
+        //       - Raw and snapped start point coordinates.
+        //       - Object points, rotation angle, and line direction.
+        //       - Pattern start and end points, segment length, and number of copies.
+        //       - Transaction commit messages and mirroring status.
+
+        // 12. **Verify the Results**:
+        //     - Visually inspect the pattern in the drawing to ensure it starts at the intended point and stops at the correct endpoint.
+        //     - If mirrored, confirm the objects are reflected correctly across the line.
+        //     - If the pattern starts incorrectly (e.g., at the line’s start instead of your picked point), note the debug output for `Snapped copyPosition` and `Snap distance`.
+
+        // 13. **Troubleshooting**:
+        //     - If the pattern is not visible before the mirroring prompt, ensure the command completes without errors.
+        //     - If the start point is incorrect, verify your picked point and check `Snap distance` in the debug output.
+        //     - If mirroring doesn’t work, confirm the line is correctly defined and share the debug output.
+        //     - For any issues, provide the full debug output, including `Raw patternStartPoint`, `Snapped copyPosition`, and mirroring status.
+
+
         public void PatternAlongLineCommand()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
@@ -822,13 +888,14 @@ namespace Civil
 
             // Step 4: Pick start point on the line
             PromptPointOptions ppoStart = new PromptPointOptions("\nPick start point on the line: ");
+            ppoStart.UseBasePoint = false;
             PromptPointResult pprStart = ed.GetPoint(ppoStart);
             if (pprStart.Status != PromptStatus.OK)
             {
                 ed.WriteMessage("\nStart point not selected. Command cancelled.");
                 return;
             }
-            Point3d patternStartPoint = ppr1.Value.TransformBy(ed.CurrentUserCoordinateSystem.Inverse());
+            Point3d patternStartPoint = pprStart.Value.TransformBy(ed.CurrentUserCoordinateSystem.Inverse());
 
             // Step 5: Calculate spacing
             double defaultSpacing = objectPoint1.DistanceTo(objectPoint2);
@@ -911,28 +978,37 @@ namespace Civil
             double spacing = pdr.Value;
 
             // Step 6: Copy, rotate, and pattern along the line
-            using (Transaction tr = db.TransactionManager.StartTransaction())
+            List<ObjectId> newEntityIds = new List<ObjectId>();
+            int actualCopies = 0;
+
+            using (Transaction trPattern = db.TransactionManager.StartTransaction())
             {
                 try
                 {
-                    BlockTable bt = tr.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
-                    BlockTableRecord btr = tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
-                    AcadLine selectedLine = tr.GetObject(per.ObjectId, OpenMode.ForRead) as AcadLine;
+                    BlockTable bt = trPattern.GetObject(db.BlockTableId, OpenMode.ForRead) as BlockTable;
+                    BlockTableRecord btr = trPattern.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite) as BlockTableRecord;
+                    AcadLine selectedLine = trPattern.GetObject(per.ObjectId, OpenMode.ForRead) as AcadLine;
                     if (selectedLine == null)
                     {
                         ed.WriteMessage("\nError: Could not retrieve the selected line.");
-                        tr.Abort();
+                        trPattern.Abort();
                         return;
                     }
 
                     Point3d lineStartPoint = selectedLine.StartPoint;
                     Point3d lineEndPoint = selectedLine.EndPoint;
-                    Vector3d lineDirection = (lineEndPoint - lineStartPoint).GetNormal();
+                    Vector3d lineVector = lineEndPoint - lineStartPoint;
+                    Vector3d lineDirection = lineVector.GetNormal();
                     Vector3d patternDirection = (objectPoint2 - objectPoint1).GetNormal();
                     double distanceBetweenPoints = objectPoint1.DistanceTo(objectPoint2);
 
                     // Snap start point to the line
                     Point3d copyPosition = selectedLine.GetClosestPointTo(patternStartPoint, false);
+                    double snapDistance = patternStartPoint.DistanceTo(copyPosition);
+                    if (snapDistance > tolerance)
+                    {
+                        ed.WriteMessage($"\nWarning: Picked start point {patternStartPoint} is {snapDistance:F4} units from line. Snapped to {copyPosition}.");
+                    }
 
                     // Select patternEndPoint based on patternDirection.X
                     Point3d patternEndPoint = patternDirection.X > 0 ? lineEndPoint : lineStartPoint;
@@ -958,11 +1034,32 @@ namespace Civil
                     Point3d transformedPoint2 = objectPoint2.TransformBy(rotation);
                     Vector3d postRotationDirection = (transformedPoint2 - transformedPoint1).GetNormal();
 
-                    // Set lineDirection toward patternEndPoint
-                    Vector3d vectorToPatternEnd = (patternEndPoint - copyPosition).GetNormal();
+                    // Set lineDirection for patterning
                     lineDirection = patternDirection.X > 0 ? lineDirection : -lineDirection;
 
+                    // Compute line parameters
+                    Vector3d vectorToStart = copyPosition - lineStartPoint;
+                    Vector3d vectorToEnd = patternEndPoint - lineStartPoint;
+                    double lineVectorLengthSquared = lineVector.DotProduct(lineVector);
+                    if (lineVectorLengthSquared < tolerance)
+                    {
+                        ed.WriteMessage("\nError: Line has zero or near-zero length.");
+                        trPattern.Abort();
+                        return;
+                    }
+                    double tStart = vectorToStart.DotProduct(lineVector) / lineVectorLengthSquared;
+                    double tEnd = vectorToEnd.DotProduct(lineVector) / lineVectorLengthSquared;
+
+                    // Estimate segment length and expected copies
+                    double segmentLength = copyPosition.DistanceTo(patternEndPoint);
+                    int expectedCopies = (int)Math.Floor(segmentLength / spacing);
+                    
+
                     // Debug output
+                    ed.WriteMessage($"\nRaw patternStartPoint: {pprStart.Value}");
+                    ed.WriteMessage($"\nTransformed patternStartPoint: {patternStartPoint}");
+                    ed.WriteMessage($"\nSnapped copyPosition: {copyPosition}");
+                    ed.WriteMessage($"\nSnap distance: {snapDistance:F4}");
                     ed.WriteMessage($"\nObjectPoint1: {objectPoint1}");
                     ed.WriteMessage($"\nObjectPoint2: {objectPoint2}");
                     ed.WriteMessage($"\nPre-rotation direction: ({patternDirection.X:F2}, {patternDirection.Y:F2})");
@@ -972,9 +1069,10 @@ namespace Civil
                     ed.WriteMessage($"\nLine direction: ({lineDirection.X:F2}, {lineDirection.Y:F2})");
                     ed.WriteMessage($"\nLine StartPoint: {lineStartPoint}, Line EndPoint: {lineEndPoint}");
                     ed.WriteMessage($"\nPattern Start: {copyPosition}, Pattern End: {patternEndPoint}");
+                    ed.WriteMessage($"\nStart parameter: {tStart:F4}, End parameter: {tEnd:F4}");
+                    ed.WriteMessage($"\nSegment length: {segmentLength:F2}, Expected copies: {expectedCopies}");
                     ed.WriteMessage($"\nTransformed objectPoint2: {transformedPoint2}");
 
-                    int actualCopies = 0;
                     int iterationCount = 0;
 
                     while (true)
@@ -986,8 +1084,14 @@ namespace Civil
                         }
                         iterationCount++;
 
-                        double distanceToEnd = copyPosition.DistanceTo(patternEndPoint);
-                        if (distanceToEnd < spacing - tolerance)
+                        // Compute current parameter
+                        vectorToStart = copyPosition - lineStartPoint;
+                        double tCopy = vectorToStart.DotProduct(lineVector) / lineVectorLengthSquared;
+
+                        // Stop if copyPosition passes patternEndPoint
+                        bool shouldStop = (patternDirection.X > 0 && tCopy >= tEnd - tolerance) ||
+                        (patternDirection.X < 0 && tCopy <= tEnd + tolerance);
+                        if (shouldStop)
                             break;
 
                         // Create transformation: rotate, displace
@@ -1002,44 +1106,97 @@ namespace Civil
                             ed.WriteMessage($"\nWarning: objectPoint2 at {transformedPoint2Final} is not on the line after transformation.");
                         }
 
+                        // Create new entities and store their ObjectIds
                         foreach (ObjectId objId in objectIdsToPattern)
                         {
-                            Entity originalEntity = tr.GetObject(objId, OpenMode.ForRead) as Entity;
+                            Entity originalEntity = trPattern.GetObject(objId, OpenMode.ForRead) as Entity;
                             if (originalEntity != null)
                             {
                                 Entity newEntity = originalEntity.Clone() as Entity;
                                 newEntity.TransformBy(transform);
                                 btr.AppendEntity(newEntity);
-                                tr.AddNewlyCreatedDBObject(newEntity, true);
+                                trPattern.AddNewlyCreatedDBObject(newEntity, true);
+                                newEntityIds.Add(newEntity.ObjectId);
                             }
                         }
 
                         actualCopies++;
                         copyPosition = selectedLine.GetClosestPointTo(copyPosition + (lineDirection * spacing), false);
+                        ed.WriteMessage($"\nIteration {actualCopies}: tCopy = {tCopy:F4}, copyPosition = {copyPosition}");
                     }
 
-                    tr.Commit();
-                    ed.WriteMessage($"\nPatterned {objectIdsToPattern.Count} object(s) with {actualCopies} copies at {spacing:F2} spacing.");
+                    trPattern.Commit();
+                    ed.WriteMessage($"\nPattern transaction committed with {actualCopies} copies.");
                 }
                 catch (Autodesk.AutoCAD.Runtime.Exception ex)
                 {
-                    ed.WriteMessage($"\nError: {ex.Message}");
-                    tr.Abort();
+                    ed.WriteMessage($"\nError in patterning: {ex.Message}");
+                    trPattern.Abort();
+                    return;
                 }
             }
+
+            // Step 7: Prompt for mirroring and apply if needed
+            bool applyMirror = false;
+            if (actualCopies > 0)
+            {
+                PromptKeywordOptions pkoMirror = new PromptKeywordOptions("\nMirror pattern about the line? [Mirror/Keep]: ", "Mirror Keep");
+                pkoMirror.AllowNone = false;
+                pkoMirror.Keywords.Default = "Keep";
+                PromptResult prMirror = ed.GetKeywords(pkoMirror);
+                if (prMirror.Status != PromptStatus.OK)
+                {
+                    ed.WriteMessage("\nMirror option not selected. Keeping pattern as is.");
+                }
+                else if (prMirror.StringResult == "Mirror")
+                {
+                    using (Transaction trMirror = db.TransactionManager.StartTransaction())
+                    {
+                        try
+                        {
+                            AcadLine selectedLine = trMirror.GetObject(per.ObjectId, OpenMode.ForRead) as AcadLine;
+                            if (selectedLine == null)
+                            {
+                                ed.WriteMessage("\nError: Could not retrieve the selected line for mirroring.");
+                                trMirror.Abort();
+                                return;
+                            }
+
+                            Point3d lineStartPoint = selectedLine.StartPoint;
+                            Point3d lineEndPoint = selectedLine.EndPoint;
+                            Line3d mirrorLine = new Line3d(lineStartPoint, lineEndPoint);
+                            Matrix3d mirrorTransform = Matrix3d.Mirroring(mirrorLine);
+
+                            foreach (ObjectId newId in newEntityIds)
+                            {
+                                Entity newEntity = trMirror.GetObject(newId, OpenMode.ForWrite) as Entity;
+                                if (newEntity != null)
+                                {
+                                    newEntity.TransformBy(mirrorTransform);
+                                }
+                            }
+
+                            applyMirror = true;
+                            ed.WriteMessage($"\nPattern mirrored about line from {lineStartPoint} to {lineEndPoint}.");
+                            trMirror.Commit();
+                            ed.WriteMessage("\nMirroring transaction committed.");
+                        }
+                        catch (Autodesk.AutoCAD.Runtime.Exception ex)
+                        {
+                            ed.WriteMessage($"\nError in mirroring: {ex.Message}");
+                            trMirror.Abort();
+                        }
+                    }
+                }
+            }
+
+            ed.WriteMessage($"\nPatterned {objectIdsToPattern.Count} object(s) with {actualCopies} copies at {spacing:F2} spacing. {(applyMirror ? "Mirrored" : "Not mirrored")}.");
         }
 
 
 
 
-
-
-
-
-
-
-
-        // Helper method to check if a point is outside the polygon
+   
         private bool IsPointOutsidePolygon(Point3d point, Point3d[] polygon)
         {
             int n = polygon.Length;
